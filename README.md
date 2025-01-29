@@ -1,1 +1,2 @@
-# gogin-authentication-service
+# Practice for using Microservices - Authentication with Golang & GinGonic
+
