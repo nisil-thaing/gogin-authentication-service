@@ -2,6 +2,7 @@ package api
 
 import (
 	"log"
+	"microservices/authentication/internal/app/auth"
 	"net/http"
 
 	"github.com/gin-gonic/gin"
@@ -18,10 +19,10 @@ func SetupAPI(uri string) {
 	// Welcome Announcement
 	publicRouter.GET("/", welcomeController)
 
-	// auth.SetupRoutes(publicRouter.Group("/auth"))
+	auth.SetupRoutes(publicRouter.Group("/auth"))
 	// users.SetupRoutes(publicRouter.Group("/users"))
 
 	if err := router.Run(uri); err != nil {
-		log.Fatal("Oops! Couldn't starting the server:", err)
+		log.Fatal("❌ Oops! Couldn't starting the server:", err)
 	}
 }
