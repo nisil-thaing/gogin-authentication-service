@@ -60,6 +60,13 @@ func HandleRegistration(c *gin.Context) {
 	}
 
 	// TODO: store user data to the database
+	currentSession, err := dbClient.StartSession()
+	if err != nil {
+		log.Fatal(err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	defer currentSession.EndSession(context.Background())
 	userId := primitive.NewObjectID()
 	userRole := "USER"
 	currentTime, _ := time.Parse(time.RFC3339, time.Now().UTC().Format(time.RFC3339))
@@ -77,7 +84,7 @@ func HandleRegistration(c *gin.Context) {
 		UpdatedAt: currentTime,
 	}
 
-	_, err := usersCollection.InsertOne(ctx, newUser)
+	_, err = usersCollection.InsertOne(ctx, newUser)
 	if err != nil {
 		log.Fatal(err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
