@@ -5,6 +5,7 @@ import (
 	"log"
 	userpassword "microservices/authentication/internal/app/user-password"
 	usertoken "microservices/authentication/internal/app/user-token"
+	"microservices/authentication/internal/constants"
 	"microservices/authentication/internal/database"
 	"microservices/authentication/internal/models"
 	"net/http"
@@ -13,13 +14,10 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/go-playground/validator/v10"
+	"github.com/google/uuid"
 	"go.mongodb.org/mongo-driver/bson/primitive"
 	"go.mongodb.org/mongo-driver/v2/bson"
 )
-
-const registeringProgressTimeout = 100 * time.Second
-
-const usersCollectionName = "users"
 
 var validate = validator.New()
 
@@ -33,7 +31,7 @@ func HandleRegistration(c *gin.Context) {
 	}
 
 	var registeringUser models.RegisteringUserSchema
-	ctx, cancel := context.WithTimeout(context.Background(), registeringProgressTimeout)
+	ctx, cancel := context.WithTimeout(context.Background(), constants.ProgressTimeout)
 
 	if err := c.ShouldBindJSON(&registeringUser); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
@@ -48,7 +46,7 @@ func HandleRegistration(c *gin.Context) {
 	}
 
 	dbClient := database.GetDBInstance()
-	usersCollection := database.OpenCollection(dbClient, dbName, usersCollectionName)
+	usersCollection := database.OpenCollection(dbClient, dbName, constants.COLLECTION_NAMES["USERS"])
 
 	checkingUsersExistingQuery := bson.M{"email": registeringUser.Email}
 
@@ -59,7 +57,6 @@ func HandleRegistration(c *gin.Context) {
 		return
 	}
 
-	// TODO: store user data to the database
 	currentSession, err := dbClient.StartSession()
 	if err != nil {
 		log.Fatal(err)
@@ -68,13 +65,14 @@ func HandleRegistration(c *gin.Context) {
 	}
 	defer currentSession.EndSession(context.Background())
 	userId := primitive.NewObjectID()
+	userUUID := uuid.New()
 	userRole := "USER"
 	currentTime, _ := time.Parse(time.RFC3339, time.Now().UTC().Format(time.RFC3339))
 
 	newUser := models.UserSchema{
-		ID:     userId,
-		UserID: userId.Hex(),
-		Role:   userRole,
+		ID:   userId,
+		UUID: userUUID.String(),
+		Role: userRole,
 		// Username:    nil,
 		Email:     registeringUser.Email,
 		FirstName: registeringUser.FirstName,
@@ -91,14 +89,66 @@ func HandleRegistration(c *gin.Context) {
 		return
 	}
 
-	err = userpassword.UpdateUserPassword(ctx, newUser.UserID, registeringUser.Password)
+	err = userpassword.UpdateUserPassword(ctx, newUser.UUID, registeringUser.Password)
 	if err != nil {
 		log.Fatal(err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
 
-	userTokens, err := usertoken.UpdateUserToken(ctx, newUser, secretKey)
+	// TODO: set user status as PENDING_VEIRIFICATION, send email to user to verify it with a token
+
+	c.JSON(http.StatusOK, gin.H{})
+}
+
+func HandleSigningIn(c *gin.Context) {
+	dbName := os.Getenv("DB_NAME")
+	secretKey := os.Getenv("JWT_SECRET_KEY")
+
+	if dbName == "" || secretKey == "" {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Could not generate JWT tokens!"})
+		return
+	}
+
+	var credentials models.UserSigningInSchema
+	ctx, cancel := context.WithTimeout(context.Background(), constants.ProgressTimeout)
+
+	if err := c.ShouldBindJSON(&credentials); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		defer cancel()
+		return
+	}
+
+	if err := validate.Struct(credentials); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		defer cancel()
+		return
+	}
+
+	if !credentials.Validate() {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Either email or username must be provided"})
+		defer cancel()
+		return
+	}
+
+	dbClient := database.GetDBInstance()
+	usersCollection := database.OpenCollection(dbClient, dbName, constants.COLLECTION_NAMES["USERS"])
+
+	defer cancel()
+
+	var matchingUser models.UserSchema
+
+	if err := usersCollection.FindOne(ctx, bson.M{"email": credentials.Email}).Decode(&matchingUser); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Email or password is invalid"})
+		return
+	}
+
+	if err := userpassword.VerifyUserPassword(matchingUser.UUID, credentials.Password); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Email or password is invalid"})
+		return
+	}
+
+	userTokens, err := usertoken.CreateNewToken(matchingUser)
 	if err != nil {
 		log.Fatal(err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Could not generate tokens due to some unexpected issues!"})

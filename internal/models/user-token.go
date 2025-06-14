@@ -9,12 +9,13 @@ import (
 
 type UserTokenSchema struct {
 	ID           primitive.ObjectID `bson:"_id"`
-	UserID       string             `bson:"user_id"`
-	AccessToken  string             `bson:"access_token"`
+	UUID         string             `bson:"uuid"`
+	UserUUID     string             `bson:"user_uuid"`
 	RefreshToken string             `bson:"refresh_token"`
 	ExpiresAt    time.Time          `bson:"expires_at"`
 	CreatedAt    time.Time          `bson:"created_at"`
-	UpdatedAt    time.Time          `bson:"updated_at"`
+	UpdatedAt    time.Time          `bson:"updated_at,omitempty"`
+	RevokedAt    time.Time          `bson:"revoked_at,omitempty"`
 }
 
 type UserTokensPublicInfo struct {
@@ -24,7 +25,8 @@ type UserTokensPublicInfo struct {
 }
 
 type JWTSigningClaims struct {
-	UserID    string
+	UserUUID  string
+	TokenUUID string `json:"jti"`
 	Username  string
 	Email     string
 	FirstName string

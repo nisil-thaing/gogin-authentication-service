@@ -1,6 +1,7 @@
 package utils
 
 import (
+	"errors"
 	"log"
 	"microservices/authentication/internal/models"
 	"time"
@@ -8,20 +9,21 @@ import (
 	"github.com/golang-jwt/jwt/v5"
 )
 
-func GenerateTokens(user models.UserSchema, secretKey string) (*models.UserTokensPublicInfo, error) {
-	timeNowInLocal := time.Now().Local()
+func GenerateTokens(user models.UserSchema, tokenUUID string, secretKey string) (*models.UserTokensPublicInfo, error) {
+	timeNow := time.Now().UTC()
 	accessTokenClaims := models.JWTSigningClaims{
-		UserID:    user.UserID,
+		UserUUID:  user.UUID,
+		TokenUUID: tokenUUID,
 		Email:     user.Email,
 		FirstName: *user.FirstName,
 		LastName:  *user.LastName,
 		Role:      user.Role,
 		RegisteredClaims: jwt.RegisteredClaims{
-			ExpiresAt: jwt.NewNumericDate(timeNowInLocal.Add(time.Duration(24) * time.Hour)),
+			ExpiresAt: jwt.NewNumericDate(timeNow.Add(time.Duration(24) * time.Hour)),
 		},
 	}
 
-	tokensExpireAt := timeNowInLocal.Add(time.Duration(168) * time.Hour)
+	tokensExpireAt := timeNow.Add(time.Duration(168) * time.Hour)
 	refreshTokenClaims := models.JWTSigningClaims{
 		RegisteredClaims: jwt.RegisteredClaims{
 			ExpiresAt: jwt.NewNumericDate(tokensExpireAt),
@@ -40,10 +42,24 @@ func GenerateTokens(user models.UserSchema, secretKey string) (*models.UserToken
 		return nil, err
 	}
 
-	expiresAt, _ := time.Parse(time.RFC3339, tokensExpireAt.UTC().Format(time.RFC3339))
 	return &models.UserTokensPublicInfo{
 		AccessToken:  signedAccessToken,
 		RefreshToken: signedRefreshToken,
-		ExpiresAt:    expiresAt,
+		ExpiresAt:    tokensExpireAt,
 	}, nil
+}
+
+func ValidateToken(token string, secretKey string) (*models.JWTSigningClaims, error) {
+	parsedToken, err := jwt.ParseWithClaims(token, &models.JWTSigningClaims{}, func(token *jwt.Token) (interface{}, error) {
+		return []byte(secretKey), nil
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	if !parsedToken.Valid {
+		return nil, errors.New("invalid token")
+	}
+
+	return parsedToken.Claims.(*models.JWTSigningClaims), nil
 }

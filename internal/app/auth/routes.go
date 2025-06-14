@@ -12,5 +12,5 @@ func SetupRoutes(router *gin.RouterGroup) {
 	})
 
 	router.POST("/register", HandleRegistration)
-	// router.POST("/signin", HandleSigningIn)
+	router.POST("/signin", HandleSigningIn)
 }
