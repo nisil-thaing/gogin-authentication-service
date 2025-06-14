@@ -14,7 +14,33 @@ import (
 	"golang.org/x/crypto/bcrypt"
 )
 
-const userPasswordsCollectionName = "user_passwords"
+const (
+	progressTimeout             = 100 * time.Second
+	userPasswordsCollectionName = "user_passwords"
+)
+
+func VerifyUserPassword(userId string, userPassword string) error {
+	dbName := os.Getenv("DB_NAME")
+	dbClient := database.GetDBInstance()
+	userPasswordsCollection := database.OpenCollection(dbClient, dbName, userPasswordsCollectionName)
+
+	var existingUserPasswordDetails models.UserPasswordSchema
+	ctx, cancel := context.WithTimeout(context.Background(), progressTimeout)
+
+	if err := userPasswordsCollection.FindOne(ctx, bson.M{"user_id": userId}).Decode(&existingUserPasswordDetails); err != nil {
+		defer cancel()
+		return err
+	}
+
+	if err := bcrypt.CompareHashAndPassword([]byte(existingUserPasswordDetails.Hash), []byte(userPassword)); err != nil {
+		defer cancel()
+		return err
+	}
+
+	defer cancel()
+
+	return nil
+}
 
 func UpdateUserPassword(ctx context.Context, userId string, userPassword string) error {
 	dbName := os.Getenv("DB_NAME")
