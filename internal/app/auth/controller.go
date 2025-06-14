@@ -109,3 +109,15 @@ func HandleRegistration(c *gin.Context) {
 
 	c.JSON(http.StatusOK, gin.H{"accessToken": accessToken, "refreshToken": refreshToken})
 }
+
+func HandleSigningIn(c *gin.Context) {
+	dbName := os.Getenv("DB_NAME")
+	secretKey := os.Getenv("JWT_SECRET_KEY")
+
+	if dbName == "" || secretKey == "" {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Could not generate JWT tokens!"})
+		return
+	}
+
+	// TODO
+}
