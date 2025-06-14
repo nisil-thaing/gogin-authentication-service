@@ -17,9 +17,10 @@ import (
 	"go.mongodb.org/mongo-driver/v2/bson"
 )
 
-const registeringProgressTimeout = 100 * time.Second
-
-const usersCollectionName = "users"
+const (
+	progressTimeout     = 100 * time.Second
+	usersCollectionName = "users"
+)
 
 var validate = validator.New()
 
@@ -33,7 +34,7 @@ func HandleRegistration(c *gin.Context) {
 	}
 
 	var registeringUser models.RegisteringUserSchema
-	ctx, cancel := context.WithTimeout(context.Background(), registeringProgressTimeout)
+	ctx, cancel := context.WithTimeout(context.Background(), progressTimeout)
 
 	if err := c.ShouldBindJSON(&registeringUser); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
@@ -98,7 +99,7 @@ func HandleRegistration(c *gin.Context) {
 		return
 	}
 
-	userTokens, err := usertoken.UpdateUserToken(ctx, newUser, secretKey)
+	userTokens, err := usertoken.UpdateUserToken(newUser, secretKey)
 	if err != nil {
 		log.Fatal(err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Could not generate tokens due to some unexpected issues!"})
@@ -119,5 +120,53 @@ func HandleSigningIn(c *gin.Context) {
 		return
 	}
 
-	// TODO
+	var credentials models.UserSigningInSchema
+	ctx, cancel := context.WithTimeout(context.Background(), progressTimeout)
+
+	if err := c.ShouldBindJSON(&credentials); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		defer cancel()
+		return
+	}
+
+	if err := validate.Struct(credentials); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		defer cancel()
+		return
+	}
+
+	if !credentials.Validate() {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Either email or username must be provided"})
+		defer cancel()
+		return
+	}
+
+	dbClient := database.GetDBInstance()
+	usersCollection := database.OpenCollection(dbClient, dbName, usersCollectionName)
+
+	defer cancel()
+
+	var matchingUser models.UserSchema
+
+	if err := usersCollection.FindOne(ctx, bson.M{"email": credentials.Email}).Decode(&matchingUser); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Email or password is invalid"})
+		return
+	}
+
+	if err := userpassword.VerifyUserPassword(matchingUser.UserID, credentials.Password); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Email or password is invalid"})
+		return
+	}
+
+	// TODO: generate user tokens, store it, then return
+	userTokens, err := usertoken.UpdateUserToken(matchingUser, secretKey)
+	if err != nil {
+		log.Fatal(err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Could not generate tokens due to some unexpected issues!"})
+	}
+
+	accessToken := userTokens.AccessToken
+	refreshToken := userTokens.RefreshToken
+
+	c.JSON(http.StatusOK, gin.H{"accessToken": accessToken, "refreshToken": refreshToken})
 }

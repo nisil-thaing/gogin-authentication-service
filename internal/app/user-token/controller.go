@@ -11,27 +11,50 @@ import (
 
 	"go.mongodb.org/mongo-driver/bson/primitive"
 	"go.mongodb.org/mongo-driver/v2/bson"
+	"go.mongodb.org/mongo-driver/v2/mongo"
+	"go.mongodb.org/mongo-driver/v2/mongo/options"
 )
 
-const userTokensCollectionName = "user_tokens"
+const (
+	progressTimeout          = 100 * time.Second
+	userTokensCollectionName = "user_tokens"
+)
 
-func UpdateUserToken(ctx context.Context, user models.UserSchema, secretKey string) (*models.UserTokensPublicInfo, error) {
+func UpdateUserToken(user models.UserSchema, secretKey string) (*models.UserTokensPublicInfo, error) {
 	dbName := os.Getenv("DB_NAME")
 	dbClient := database.GetDBInstance()
 	userTokensCollection := database.OpenCollection(dbClient, dbName, userTokensCollectionName)
 
 	var userTokensDetails models.UserTokenSchema
+	ctx, cancel := context.WithTimeout(context.Background(), progressTimeout)
 
 	findingExistingTokenQuery := bson.M{"user_id": user.UserID}
 
 	err := userTokensCollection.FindOne(ctx, findingExistingTokenQuery).Decode(&userTokensDetails)
 
+	var updatingData bson.D
 	currentTime, _ := time.Parse(time.RFC3339, time.Now().UTC().Format(time.RFC3339))
 
-	// Handle the case of err == nil, userTokensDetails != nil, but the RefreshToken is expired
-	if err != nil {
-		// TODO: No existing user's tokens found, generate new tokens, add to DB"
+	isNoDataExisting := err == mongo.ErrNoDocuments
+
+	if err != nil && !isNoDataExisting {
+		defer cancel()
+		return nil, err
+	}
+
+	isTokensExpired := userTokensDetails.ExpiresAt.Before(currentTime)
+
+	if !isTokensExpired {
+		_, err = utils.ValidateToken(userTokensDetails.AccessToken, secretKey)
+		isTokensExpired = err != nil
+	}
+
+	if isNoDataExisting || isTokensExpired {
+		// TODO: No existing user's tokens found, or it's found, but the tokens are expired:
+		// generate new tokens, add to DB"
 		userTokens, err := utils.GenerateTokens(user, secretKey)
+		defer cancel()
+
 		if err != nil {
 			return nil, err
 		}
@@ -40,16 +63,24 @@ func UpdateUserToken(ctx context.Context, user models.UserSchema, secretKey stri
 			return nil, errors.New("❌ Could not generate the tokens")
 		}
 
-		userTokensDetails.ID = primitive.NewObjectID()
-		userTokensDetails.UserID = user.UserID
-		userTokensDetails.AccessToken = userTokens.AccessToken
-		userTokensDetails.RefreshToken = userTokens.RefreshToken
-		userTokensDetails.ExpiresAt = userTokens.ExpiresAt
-		userTokensDetails.CreatedAt = currentTime
-		userTokensDetails.UpdatedAt = currentTime
+		if isNoDataExisting {
+			updatingData = append(updatingData, bson.E{Key: "_id", Value: primitive.NewObjectID()})
+			updatingData = append(updatingData, bson.E{Key: "user_id", Value: user.UserID})
+			updatingData = append(updatingData, bson.E{Key: "created_at", Value: currentTime})
+		}
 
-		// TODO: store it to the database
-		_, err = userTokensCollection.InsertOne(ctx, userTokensDetails)
+		updatingData = append(updatingData, bson.E{Key: "access_token", Value: userTokens.AccessToken})
+		updatingData = append(updatingData, bson.E{Key: "refresh_token", Value: userTokens.RefreshToken})
+		updatingData = append(updatingData, bson.E{Key: "expires_at", Value: userTokens.ExpiresAt})
+		updatingData = append(updatingData, bson.E{Key: "updated_at", Value: currentTime})
+
+		// Store user token to database
+		upsert := true
+		opts := options.UpdateOne().SetUpsert(upsert)
+
+		_, err = userTokensCollection.UpdateOne(ctx, findingExistingTokenQuery, bson.M{
+			"$set": updatingData,
+		}, opts)
 		if err != nil {
 			return nil, err
 		}
@@ -57,10 +88,11 @@ func UpdateUserToken(ctx context.Context, user models.UserSchema, secretKey stri
 		return userTokens, nil
 	}
 
-	// TODO: check if the tokens has expired?
-	// YES? Generate new tokens, update the existing
-	// NO? renew the AccessToken by the RefreshToken, store it again
+	defer cancel()
 
-	// TODO
-	return nil, nil
+	return &models.UserTokensPublicInfo{
+		AccessToken:  userTokensDetails.AccessToken,
+		RefreshToken: userTokensDetails.RefreshToken,
+		ExpiresAt:    userTokensDetails.ExpiresAt,
+	}, nil
 }
