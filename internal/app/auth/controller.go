@@ -60,7 +60,6 @@ func HandleRegistration(c *gin.Context) {
 		return
 	}
 
-	// TODO: store user data to the database
 	currentSession, err := dbClient.StartSession()
 	if err != nil {
 		log.Fatal(err)
@@ -92,6 +91,7 @@ func HandleRegistration(c *gin.Context) {
 		return
 	}
 
+	// TODO: call CreateNewToken instead
 	err = userpassword.UpdateUserPassword(ctx, newUser.UserID, registeringUser.Password)
 	if err != nil {
 		log.Fatal(err)
@@ -99,16 +99,9 @@ func HandleRegistration(c *gin.Context) {
 		return
 	}
 
-	userTokens, err := usertoken.UpdateUserToken(newUser, secretKey)
-	if err != nil {
-		log.Fatal(err)
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Could not generate tokens due to some unexpected issues!"})
-	}
+	// TODO: set user status as PENDING_VEIRIFICATION, send email to user to verify it with a token
 
-	accessToken := userTokens.AccessToken
-	refreshToken := userTokens.RefreshToken
-
-	c.JSON(http.StatusOK, gin.H{"accessToken": accessToken, "refreshToken": refreshToken})
+	c.JSON(http.StatusOK, gin.H{})
 }
 
 func HandleSigningIn(c *gin.Context) {
@@ -158,8 +151,7 @@ func HandleSigningIn(c *gin.Context) {
 		return
 	}
 
-	// TODO: generate user tokens, store it, then return
-	userTokens, err := usertoken.UpdateUserToken(matchingUser, secretKey)
+	userTokens, err := usertoken.CreateNewToken(matchingUser)
 	if err != nil {
 		log.Fatal(err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Could not generate tokens due to some unexpected issues!"})
