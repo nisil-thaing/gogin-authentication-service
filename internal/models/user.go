@@ -8,7 +8,7 @@ import (
 
 type UserSchema struct {
 	ID          primitive.ObjectID `bson:"_id"`
-	UserID      string             `bson:"user_id"`
+	UUID        string             `bson:"uuid"`
 	Role        string             `bson:"role" validate:"required,eq=ADMIN|eq=USER"`
 	Username    *string            `bson:"username"`
 	Email       string             `bson:"email" validate:"email,required"`

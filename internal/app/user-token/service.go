@@ -42,7 +42,7 @@ func CreateNewToken(user models.UserSchema) (*models.UserTokensPublicInfo, error
 	newTokenData := &models.UserTokenSchema{
 		ID:           tokenId,
 		UUID:         tokenUUID.String(),
-		UserID:       user.UserID,
+		UserUUID:     user.UUID,
 		RefreshToken: userTokens.RefreshToken,
 		ExpiresAt:    userTokens.ExpiresAt,
 		CreatedAt:    currentTime,

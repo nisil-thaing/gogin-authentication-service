@@ -12,7 +12,7 @@ import (
 func GenerateTokens(user models.UserSchema, tokenUUID string, secretKey string) (*models.UserTokensPublicInfo, error) {
 	timeNow := time.Now().UTC()
 	accessTokenClaims := models.JWTSigningClaims{
-		UserID:    user.UserID,
+		UserUUID:  user.UUID,
 		TokenUUID: tokenUUID,
 		Email:     user.Email,
 		FirstName: *user.FirstName,

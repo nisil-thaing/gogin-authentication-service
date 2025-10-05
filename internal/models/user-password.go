@@ -8,7 +8,8 @@ import (
 
 type UserPasswordSchema struct {
 	ID        primitive.ObjectID `bson:"_id"`
-	UserID    string             `bson:"user_id"`
+	UUID      string             `bson:"uuid"`
+	UserUUID  string             `bson:"user_uuid"`
 	Hash      string             `bson:"hash"`
 	Salt      string             `bson:"salt"`
 	Algorithm string             `bson:"algorithm"`
