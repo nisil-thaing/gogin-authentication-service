@@ -2,32 +2,29 @@ package userpassword
 
 import (
 	"context"
+	"microservices/authentication/internal/constants"
 	"microservices/authentication/internal/database"
 	"microservices/authentication/internal/models"
 	"microservices/authentication/internal/utils"
 	"os"
 	"time"
 
+	"github.com/google/uuid"
 	"go.mongodb.org/mongo-driver/bson/primitive"
 	"go.mongodb.org/mongo-driver/v2/bson"
 	"go.mongodb.org/mongo-driver/v2/mongo/options"
 	"golang.org/x/crypto/bcrypt"
 )
 
-const (
-	progressTimeout             = 100 * time.Second
-	userPasswordsCollectionName = "user_passwords"
-)
-
-func VerifyUserPassword(userId string, userPassword string) error {
+func VerifyUserPassword(userUUID string, userPassword string) error {
 	dbName := os.Getenv("DB_NAME")
 	dbClient := database.GetDBInstance()
-	userPasswordsCollection := database.OpenCollection(dbClient, dbName, userPasswordsCollectionName)
+	userPasswordsCollection := database.OpenCollection(dbClient, dbName, constants.COLLECTION_NAMES["USER_PASSWORDS"])
 
 	var existingUserPasswordDetails models.UserPasswordSchema
-	ctx, cancel := context.WithTimeout(context.Background(), progressTimeout)
+	ctx, cancel := context.WithTimeout(context.Background(), constants.ProgressTimeout)
 
-	if err := userPasswordsCollection.FindOne(ctx, bson.M{"user_id": userId}).Decode(&existingUserPasswordDetails); err != nil {
+	if err := userPasswordsCollection.FindOne(ctx, bson.M{"user_uuid": userUUID}).Decode(&existingUserPasswordDetails); err != nil {
 		defer cancel()
 		return err
 	}
@@ -39,21 +36,22 @@ func VerifyUserPassword(userId string, userPassword string) error {
 	return err
 }
 
-func UpdateUserPassword(ctx context.Context, userId string, userPassword string) error {
+func UpdateUserPassword(ctx context.Context, userUUID string, userPassword string) error {
 	dbName := os.Getenv("DB_NAME")
 	dbClient := database.GetDBInstance()
-	userPasswordsCollection := database.OpenCollection(dbClient, dbName, userPasswordsCollectionName)
+	userPasswordsCollection := database.OpenCollection(dbClient, dbName, constants.COLLECTION_NAMES["USER_PASSWORDS"])
 
 	var existingUserPasswordDetails models.UserPasswordSchema
 	var newUserPasswordDetails models.UserPasswordSchema
 
-	findingExistingPasswordQuery := bson.M{"user_id": userId}
+	findingExistingPasswordQuery := bson.M{"user_uuid": userUUID}
 	err := userPasswordsCollection.FindOne(ctx, findingExistingPasswordQuery).Decode(&existingUserPasswordDetails)
 
 	currentTime, _ := time.Parse(time.RFC3339, time.Now().Format(time.RFC3339))
 
 	if err != nil {
 		id := primitive.NewObjectID()
+		userPasswordUUID := uuid.New()
 		salt, err := utils.GenerateSalt(bcrypt.DefaultCost)
 		if err != nil {
 			return err
@@ -67,7 +65,8 @@ func UpdateUserPassword(ctx context.Context, userId string, userPassword string)
 
 		newUserPasswordDetails = models.UserPasswordSchema{
 			ID:        id,
-			UserID:    userId,
+			UUID:      userPasswordUUID.String(),
+			UserUUID:  userUUID,
 			Hash:      string(hashedPassword),
 			Salt:      salt,
 			Algorithm: "bcrypt",

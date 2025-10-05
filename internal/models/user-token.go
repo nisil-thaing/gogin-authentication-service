@@ -10,7 +10,7 @@ import (
 type UserTokenSchema struct {
 	ID           primitive.ObjectID `bson:"_id"`
 	UUID         string             `bson:"uuid"`
-	UserID       string             `bson:"user_id"`
+	UserUUID     string             `bson:"user_uuid"`
 	RefreshToken string             `bson:"refresh_token"`
 	ExpiresAt    time.Time          `bson:"expires_at"`
 	CreatedAt    time.Time          `bson:"created_at"`
@@ -25,7 +25,7 @@ type UserTokensPublicInfo struct {
 }
 
 type JWTSigningClaims struct {
-	UserID    string // replace it by something like UserUUID once it available
+	UserUUID  string
 	TokenUUID string `json:"jti"`
 	Username  string
 	Email     string
