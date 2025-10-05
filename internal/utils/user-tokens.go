@@ -9,10 +9,11 @@ import (
 	"github.com/golang-jwt/jwt/v5"
 )
 
-func GenerateTokens(user models.UserSchema, secretKey string) (*models.UserTokensPublicInfo, error) {
+func GenerateTokens(user models.UserSchema, tokenUUID string, secretKey string) (*models.UserTokensPublicInfo, error) {
 	timeNow := time.Now().UTC()
 	accessTokenClaims := models.JWTSigningClaims{
 		UserID:    user.UserID,
+		TokenUUID: tokenUUID,
 		Email:     user.Email,
 		FirstName: *user.FirstName,
 		LastName:  *user.LastName,
