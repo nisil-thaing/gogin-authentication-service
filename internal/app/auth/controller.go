@@ -66,7 +66,8 @@ func HandleRegistration(c *gin.Context) {
 	defer currentSession.EndSession(context.Background())
 	userId := primitive.NewObjectID()
 	userUUID := uuid.New()
-	userRole := "USER"
+	userRole := models.UserNormalRole
+	userStatus := models.UserPendingVerificationStatus
 	currentTime, _ := time.Parse(time.RFC3339, time.Now().UTC().Format(time.RFC3339))
 
 	newUser := models.UserSchema{
@@ -78,6 +79,8 @@ func HandleRegistration(c *gin.Context) {
 		FirstName: registeringUser.FirstName,
 		LastName:  registeringUser.LastName,
 		// PhoneNumber: nil,
+		// AvatarUrl: nil,
+		Status:    userStatus,
 		CreatedAt: currentTime,
 		UpdatedAt: currentTime,
 	}
@@ -140,6 +143,11 @@ func HandleSigningIn(c *gin.Context) {
 
 	if err := usersCollection.FindOne(ctx, bson.M{"email": credentials.Email}).Decode(&matchingUser); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Email or password is invalid"})
+		return
+	}
+
+	if matchingUser.Status != models.UserActiveStatus {
+		c.JSON(http.StatusForbidden, gin.H{"error": "Your account isn't verified yet or temporary locked"})
 		return
 	}
 
