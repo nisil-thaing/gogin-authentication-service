@@ -25,7 +25,7 @@ func CreateNewToken(user models.UserSchema) (*models.UserTokensPublicInfo, error
 	ctx, cancel := context.WithTimeout(context.Background(), constants.ProgressTimeout)
 
 	tokenUUID := uuid.New()
-	userTokens, err := utils.GenerateTokens(user, tokenUUID.String(), secretKey)
+	userTokens, err := utils.GenerateUserTokens(user, tokenUUID.String(), secretKey)
 	defer cancel()
 
 	if err != nil {

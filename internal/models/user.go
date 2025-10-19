@@ -11,6 +11,17 @@ type (
 	UserStatus string
 )
 
+var UserRoles = map[string]string{
+	"ADMIN": "User with administrative privileges and full access",
+	"USER":  "Regular user with standard access rights",
+}
+
+var UserStatuses = map[string]string{
+	"PENDING_VERIFICATION": "User has registered but not yet verified their email",
+	"INACTIVE":             "User account is temporarily disabled or suspended",
+	"ACTIVE":               "User account is active and fully verified",
+}
+
 type UserSchema struct {
 	ID          primitive.ObjectID `bson:"_id"`
 	UUID        string             `bson:"uuid"`
